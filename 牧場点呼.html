@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select=no">
+<title>動物パズル攻略アプリ（スマホ最適化版）</title>
+<style>
+  :root {
+    --bg-color: #f4f6f9;
+    --board-bg: #e2e8f0;
+    --grid-bg: #cbd5e1;
+    --cell-bg: #ffffff;
+    --cell-border: #94a3b8;
+    --text-main: #1e293b;
+    --orange-bar: #ff9800;
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  /* ヘッダー（赤ヘルプボタン ＆ 青ボタン） */
+  .header {
+    width: 100%;
+    max-width: 360px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+  }
+  .help-btn {
+    width: 44px;
+    height: 44px;
+    background-color: #ef4444;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-size: 22px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(239, 68, 68, 0.3);
+    border: none;
+  }
+  .exec-btn {
+    width: 120px;
+    height: 46px;
+    background-color: #3b82f6;
+    border-radius: 12px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-weight: bold;
+    font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
+    border: none;
+  }
+  .exec-btn:active, .help-btn:active {
+    transform: scale(0.95);
+  }
+
+  /* ★ スマホ最適化：画面上部に現れる「キャラ選択バー」 */
+  .selector-bar {
+    width: 100%;
+    max-width: 360px;
+    min-height: 56px;
+    background: #1e293b;
+    border-radius: 12px;
+    padding: 8px 10px;
+    margin-bottom: 10px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+    transition: all 0.2s ease;
+  }
+  .selector-title {
+    color: #f8fafc;
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .selector-options {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .opt-btn {
+    flex: 1;
+    min-width: 80px;
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    color: #0f172a;
+    text-align: center;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .opt-btn:active { transform: scale(0.96); background: #f1f5f9; }
+  .opt-btn.delete { background: #fee2e2; border-color: #fca5a5; color: #dc2626; flex: 0 0 auto; }
+  .opt-btn.cancel { background: #64748b; border-color: #475569; color: white; flex: 0 0 auto; }
+
+  /* 操作ガイド（アイドル時に表示） */
+  .guide-text {
+    font-size: 13px;
+    color: #cbd5e1;
+    text-align: center;
+  }
+
+  /* 盤面 */
+  .board-container {
+    width: 100%;
+    max-width: 360px;
+    background-color: var(--grid-bg);
+    padding: 4px;
+    border-radius: 8px;
+    border: 2px solid #94a3b8;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+    touch-action: none;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(11, calc((360px - 8px) / 9));
+    gap: 2px;
+  }
+
+  /* 駒セルのレイアウト */
+  .cell, .next-cell:not(.empty) {
+    background-color: var(--cell-bg);
+    border: 2px solid var(--cell-border);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    position: relative;
+    overflow: hidden;
+    padding: 0;
+    box-sizing: border-box;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.12), inset 0 -3px 0 rgba(0,0,0,0.15);
+  }
+  .cell.dir-left { flex-direction: row; }
+  .cell.dir-right { flex-direction: row-reverse; }
+  .cell.dir-right .seg-image { transform: scaleX(-1); }
+
+  .cell.empty { 
+    background-color: #f8fafc; 
+    border: 1px solid #e2e8f0; 
+    box-shadow: none; 
+    border-radius: 4px;
+  }
+
+  /* ドラッグ中のハイライト＆配置保留中のハイライト */
+  .cell.highlight, .next-cell.highlight { 
+    background-color: #dcfce7 !important; 
+    border: 2px solid #22c55e !important;
+    box-shadow: 0 0 8px rgba(34, 197, 94, 0.6) !important;
+  }
+  .cell.pending, .next-cell.pending {
+    background-color: #fef08a !important;
+    border: 2px dashed #ca8a04 !important;
+  }
+
+  /* 【頭・体・お尻】パーツ */
+  .segment {
+    flex: 1; height: 100%; display: flex; align-items: center;
+    justify-content: center; position: relative; box-sizing: border-box; padding: 0;
+  }
+  .seg-image {
+    width: 100%; height: 100%; border-radius: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 11px; font-weight: bold; background: transparent;
+    color: #333; border: none; background-size: cover; background-position: center;
+    background-repeat: no-repeat;
+  }
+  .animal-label {
+    position: absolute; width: 100%; text-align: center; font-size: 11px;
+    font-weight: 900; color: #0f172a; text-shadow: 0 0 4px #fff, 0 0 4px #fff, 0 0 4px #fff;
+    pointer-events: none; z-index: 2;
+  }
+
+  /* 動物ベースカラー */
+  .cell[data-type="hiyoko"],  .next-cell[data-type="hiyoko"]  { background: #fef9c3; border-color: #facc15; }
+  .cell[data-type="kitsune"], .next-cell[data-type="kitsune"] { background: #ffedd5; border-color: #fb923c; }
+  .cell[data-type="neko"],    .next-cell[data-type="neko"]    { background: #e0f2fe; border-color: #38bdf8; }
+  .cell[data-type="hebi"],    .next-cell[data-type="hebi"]    { background: #dcfce7; border-color: #4ade80; }
+  .cell[data-type="itachi"],  .next-cell[data-type="itachi"]  { background: #f1f5f9; border-color: #94a3b8; }
+  .cell[data-type="buta"],    .next-cell[data-type="buta"]    { background: #fce7f3; border-color: #f472b6; }
+  .cell[data-type="roba"],    .next-cell[data-type="roba"]    { background: #f3e8ff; border-color: #c084fc; }
+  .cell[data-type="kuma"],    .next-cell[data-type="kuma"]    { background: #e2e8f0; border-color: #64748b; }
+  .cell[data-type="yagyu"],   .next-cell[data-type="yagyu"]   { background: #fee2e2; border-color: #f87171; }
+  .cell[data-type="yagyu"] .animal-label { color: #991b1b; }
+
+  /* 画像組み込み用エリア */
+  .cell[data-type="hiyoko"] .seg-head  { background-image: url('img/hiyoko.png'); color: transparent; }
+  .cell[data-type="kitsune"] .seg-head { background-image: url('img/kitsune.png'); color: transparent; }
+  .cell[data-type="neko"] .seg-head { background-image: url('img/neko1.png'); color: transparent; }
+  .cell[data-type="neko"] .seg-butt { background-image: url('img/neko2.png'); color: transparent; }
+  .cell[data-type="hebi"] .seg-head { background-image: url('img/hebi1.png'); color: transparent; }
+  .cell[data-type="hebi"] .seg-butt { background-image: url('img/hebi2.png'); color: transparent; }
+  .cell[data-type="itachi"] .seg-head { background-image: url('img/itachi1.png'); color: transparent; }
+  .cell[data-type="itachi"] .seg-body { background-image: url('img/itachi2.png'); color: transparent; }
+  .cell[data-type="itachi"] .seg-butt { background-image: url('img/itachi3.png'); color: transparent; }
+  .cell[data-type="buta"] .seg-head   { background-image: url('img/buta1.png'); color: transparent; }
+  .cell[data-type="buta"] .seg-body   { background-image: url('img/buta2.png'); color: transparent; }
+  .cell[data-type="buta"] .seg-butt   { background-image: url('img/buta3.png'); color: transparent; }
+  .cell[data-type="roba"] .seg-head   { background-image: url('img/roba1.png'); color: transparent; }
+  .cell[data-type="roba"] .seg-body   { background-image: url('img/roba2.png'); color: transparent; }
+  .cell[data-type="roba"] .seg-butt   { background-image: url('img/roba3.png'); color: transparent; }
+  .cell[data-type="kuma"] .seg-head   { background-image: url('img/kuma1.png'); color: transparent; }
+  .cell[data-type="kuma"] .seg-body   { background-image: url('img/kuma2.png'); color: transparent; }
+  .cell[data-type="kuma"] .seg-butt   { background-image: url('img/kuma3.png'); color: transparent; }
+  .cell[data-type="yagyu"][data-len="1"] .seg-head { background-color: #f87171; color: white; }
+
+  /* 次段バー */
+  .next-section { width: 100%; max-width: 360px; margin-top: 15px; }
+  .next-label { font-size: 12px; color: #475569; font-weight: bold; margin-bottom: 4px; display: flex; justify-content: space-between; }
+  .next-bar {
+    width: 100%; background-color: var(--orange-bar); padding: 4px; border-radius: 8px;
+    display: grid; grid-template-columns: repeat(9, 1fr); height: 48px; gap: 2px;
+    box-sizing: border-box; touch-action: none; box-shadow: 0 4px 10px rgba(255, 152, 0, 0.2);
+  }
+  .next-cell {
+    border-radius: 4px; display: flex; align-items: center;
+    justify-content: space-between; position: relative; overflow: hidden; padding: 0;
+  }
+  .next-cell.empty { background-color: rgba(255, 255, 255, 0.3); border: none; box-shadow: none; }
+
+  /* 各種ボタンとボックス */
+  .step-btn {
+    width: 100%; max-width: 360px; margin-top: 10px; padding: 14px; background-color: #ff9800;
+    color: #ffffff; font-weight: bold; font-size: 15px; border: none; border-radius: 8px;
+    cursor: pointer; text-align: center; box-shadow: 0 4px 10px rgba(255, 152, 0, 0.3);
+  }
+  .ai-result-box {
+    width: 100%; max-width: 360px; margin-top: 15px; padding: 14px; background-color: #ffffff;
+    border-left: 5px solid #3b82f6; border-radius: 6px; font-size: 14px; line-height: 1.5;
+    min-height: 50px; box-sizing: border-box; box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;
+  }
+
+  /* ヘルプモーダル */
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(2px);
+    display: none; justify-content: center; align-items: center; z-index: 1000; padding: 20px;
+    box-sizing: border-box;
+  }
+  .modal-content {
+    background: #ffffff; width: 100%; max-width: 360px; border-radius: 16px;
+    padding: 20px; box-sizing: border-box; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2); line-height: 1.6; font-size: 14px;
+  }
+  .modal-title { font-size: 18px; margin-top: 0; margin-bottom: 12px; color: #1e293b; border-bottom: 2px solid #f1f5f9; padding-bottom: 8px; text-align: center; font-weight: bold; }
+  .close-btn { margin-top: 15px; width: 100%; padding: 12px; background: #3b82f6; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; }
+</style>
+</head>
+<body>
+
+  <div class="header">
+    <button class="help-btn" onclick="openHelp()">？</button>
+    <button class="exec-btn" onclick="executeAI()">⚡ 実行</button>
+  </div>
+
+  <!-- ★ 画面上部に現れる「キャラ選択バー」 -->
+  <div id="selectorBar" class="selector-bar">
+    <div class="guide-text">
+      💡 盤面やオレンジのバーのマスを<br><b>「頭からお尻に向かって」</b>指で引っ張って離してください
+    </div>
+  </div>
+
+  <div class="board-container">
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div class="next-section">
+    <div class="next-label">
+      <span>次に出る段を準備（手動入力）</span>
+      <span style="color:#ea580c; cursor:pointer;" onclick="clearNextRow()"> [リセット]</span>
+    </div>
+    <div id="nextBar" class="next-bar"></div>
+  </div>
+  <button class="step-btn" onclick="applyNextRow()">オレンジの段を追加してターンを進める ⬆</button>
+
+  <div id="aiResult" class="ai-result-box">
+    右上青色の「⚡ 実行」ボタンを押すと、現在の盤面から最適な移動駒を分析してここに表示します。
+  </div>
+
+  <!-- 使い方ヘルプモーダル -->
+  <div id="helpModal" class="modal-overlay" onclick="closeHelp(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <h3 class="modal-title">📱 カンタン操作ガイド</h3>
+      <p><b>【駒の配置方法】</b><br>
+      配置したいマスに指を置き、<b>動物のお尻の向きへ</b>向かってスワイプして離します。<br>
+      引っ張った長さに対応する動物の候補が上に出るので、タップすれば配置完了です！</p>
+      <p><b>【駒の消去方法】</b><br>
+      消したい駒を1マスだけ「ポン」とタップして、上に出てくる「🗑️ 消去」を押すだけで消去できます。</p>
+      <p><b>【次の一手を調べる】</b><br>
+      右上の「⚡ 実行」を押すと、現在の盤面から最適な移動方法をAIが計算します！</p>
+      <button class="close-btn" onclick="closeHelp()">わかった！</button>
+    </div>
+  </div>
+
+<script>
+const WIDTH = 9;
+const HEIGHT = 11;
+let board = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(null));
+let nextRowData = new Array(WIDTH).fill(null);
+let blockIdCounter = 1;
+
+// スワイプ＆配置保留の管理
+let swipeState = { active: false, startX: -1, startY: -1, currX: -1, currY: -1, isNextBar: false };
+let pendingPlacement = null; // 指を離した後、キャラ選択待ちの領域情報
+
+// 長さに応じた動物データ
+const ANIMAL_ROSTER = {
+  1: [ { type: 'hiyoko', name: '🐥 ひよこ' }, { type: 'kitsune', name: '🦊 きつね' } ],
+  2: [ { type: 'neko', name: '🐱 ねこ' }, { type: 'hebi', name: '🐍 へび' } ],
+  3: [ { type: 'itachi', name: '🦦 いたち' }, { type: 'buta', name: '🐷 ぶた' }, { type: 'yagyu', name: '🐂 野牛' } ],
+  4: [ { type: 'roba', name: '🐴 ろば' }, { type: 'kuma', name: '🐻 くま' }, { type: 'yagyu', name: '🐂 野牛' } ],
+  5: [ { type: 'yagyu', name: '🐂 野牛' } ]
+};
+
+function init() {
+  renderBoard();
+  renderNextBar();
+  setupSwipeListeners();
+}
+
+function openHelp() { document.getElementById('helpModal').style.display = 'flex'; }
+function closeHelp(e) { 
+  if(!e || e.target.id === 'helpModal' || e.target.className === 'close-btn') {
+    document.getElementById('helpModal').style.display = 'none';
+  }
+}
+
+// ==========================================
+// ★ スマホ直感スワイプ＆ポップアップ選択
+// ==========================================
+function setupSwipeListeners() {
+  const grid = document.getElementById('grid');
+  const nextBar = document.getElementById('nextBar');
+
+  [ { el: grid, isNext: false }, { el: nextBar, isNext: true } ].forEach(({ el, isNext }) => {
+    el.addEventListener('pointerdown', (e) => {
+      // 以前の選択保留があればキャンセル
+      cancelSelection();
+
+      const coords = getCellCoords(e, el, isNext);
+      if (!coords) return;
+      swipeState = { active: true, startX: coords.x, startY: coords.y, currX: coords.x, currY: coords.y, isNextBar: isNext };
+      updateHighlight();
+    });
+
+    el.addEventListener('pointermove', (e) => {
+      if (!swipeState.active || swipeState.isNextBar !== isNext) return;
+      const coords = getCellCoords(e, el, isNext);
+      if (coords && coords.x !== swipeState.currX) {
+        // 最大5マスまでしか引っ張れないように制限
+        if (Math.abs(coords.x - swipeState.startX) < 5) {
+          swipeState.currX = coords.x;
+          updateHighlight();
+        }
+      }
+    });
+  });
+
+  window.addEventListener('pointerup', () => {
+    if (!swipeState.active) return;
+    swipeState.active = false;
+    
+    // スワイプ結果を計算
+    const startX = swipeState.startX;
+    const currX = swipeState.currX;
+    const len = Math.abs(currX - startX) + 1;
+    const dir = currX >= startX ? 'left' : 'right';
+    const minX = dir === 'left' ? startX : startX - len + 1;
+
+    pendingPlacement = {
+      minX: minX,
+      y: swipeState.startY,
+      len: len,
+      dir: dir,
+      isNextBar: swipeState.isNextBar
+    };
+
+    // ハイライトを黄色（選択保留状態）に切り替える
+    showPendingHighlight();
+    // 上の選択バーに候補を表示
+    showSelectorBar(len);
+  });
+}
+
+function getCellCoords(e, container, isNext) {
+  const rect = container.getBoundingClientRect();
+  const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+  const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+  
+  const x = Math.floor((clientX - rect.left) / (rect.width / WIDTH));
+  const y = isNext ? 0 : Math.floor((clientY - rect.top) / (rect.height / HEIGHT));
+  
+  if (x >= 0 && x < WIDTH && y >= 0 && (isNext ? y === 0 : y < HEIGHT)) {
+    return { x, y };
+  }
+  return null;
+}
+
+function updateHighlight() {
+  clearHighlight('highlight');
+  const { startX, currX, startY, isNextBar } = swipeState;
+  const targetGrid = isNextBar ? document.getElementById('nextBar') : document.getElementById('grid');
+  const cells = targetGrid.children;
+
+  const len = Math.abs(currX - startX) + 1;
+  const minX = Math.min(startX, currX);
+
+  for (let i = 0; i < len; i++) {
+    const px = minX + i;
+    if (px >= 0 && px < WIDTH) {
+      const idx = isNextBar ? px : startY * WIDTH + px;
+      if (cells[idx]) cells[idx].classList.add('highlight');
+    }
+  }
+}
+
+function showPendingHighlight() {
+  clearHighlight('highlight');
+  clearHighlight('pending');
+  if (!pendingPlacement) return;
+
+  const { minX, y, len, isNextBar } = pendingPlacement;
+  const targetGrid = isNextBar ? document.getElementById('nextBar') : document.getElementById('grid');
+  const cells = targetGrid.children;
+
+  for (let i = 0; i < len; i++) {
+    const px = minX + i;
+    if (px >= 0 && px < WIDTH) {
+      const idx = isNextBar ? px : y * WIDTH + px;
+      if (cells[idx]) cells[idx].classList.add('pending');
+    }
+  }
+}
+
+function clearHighlight(className) {
+  document.querySelectorAll('.' + className).forEach(el => el.classList.remove(className));
+}
+
+// ==========================================
+// ★ 上部バーでのキャラ選択表示
+// ==========================================
+function showSelectorBar(len) {
+  const bar = document.getElementById('selectorBar');
+  const roster = ANIMAL_ROSTER[len] || [];
+
+  let buttonsHTML = roster.map(animal => `
+    <button class="opt-btn" onclick="confirmPlacement('${animal.type}', '${animal.name.split(' ')[1]}')">
+      ${animal.name}
+    </button>
+  `).join('');
+
+  // 必ず「消去」と「キャンセル」も添える！
+  buttonsHTML += `
+    <button class="opt-btn delete" onclick="confirmPlacement('empty', '消去')">🗑️ 消去</button>
+    <button class="opt-btn cancel" onclick="cancelSelection()">✕</button>
+  `;
+
+  bar.innerHTML = `
+    <div class="selector-title">✨ ${len}マス分の動物を選択してください：</div>
+    <div class="selector-options">${buttonsHTML}</div>
+  `;
+}
+
+function cancelSelection() {
+  pendingPlacement = null;
+  clearHighlight('highlight');
+  clearHighlight('pending');
+  document.getElementById('selectorBar').innerHTML = `
+    <div class="guide-text">
+      💡 盤面やオレンジのバーのマスを<br><b>「頭からお尻に向かって」</b>指で引っ張って離してください
+    </div>
+  `;
+}
+
+function confirmPlacement(type, name) {
+  if (!pendingPlacement) return;
+  const { minX, y, len, dir, isNextBar } = pendingPlacement;
+  const targetBoard = isNextBar ? [nextRowData] : board;
+  const targetY = isNextBar ? 0 : y;
+
+  if (type === 'empty') {
+    // 選択範囲に関わる既存駒をすべて消去
+    for (let i = 0; i < len; i++) {
+      const targetBlock = targetBoard[targetY][minX + i];
+      if (targetBlock) {
+        const oldId = targetBlock.id;
+        for (let c = 0; c < WIDTH; c++) {
+          if (targetBoard[targetY][c] && targetBoard[targetY][c].id === oldId) targetBoard[targetY][c] = null;
+        }
+      }
+    }
+  } else {
+    // 既存駒との重複をクリアしてから配置
+    for (let i = 0; i < len; i++) {
+      if (targetBoard[targetY][minX + i] !== null) {
+        const oldId = targetBoard[targetY][minX + i].id;
+        for (let c = 0; c < WIDTH; c++) {
+          if (targetBoard[targetY][c] && targetBoard[targetY][c].id === oldId) targetBoard[targetY][c] = null;
+        }
+      }
+    }
+
+    const newBlock = {
+      id: blockIdCounter++,
+      type: type,
+      name: name,
+      len: len,
+      dir: dir
+    };
+
+    for (let i = 0; i < len; i++) {
+      targetBoard[targetY][minX + i] = newBlock;
+    }
+  }
+
+  cancelSelection();
+  isNextBar ? renderNextBar() : renderBoard();
+}
+
+// ==========================================
+// 【頭・体・お尻】のHTML生成ロジック
+// ==========================================
+function createSegmentsHTML(block) {
+  let segmentsHTML = '';
+  for (let i = 0; i < block.len; i++) {
+    let segType = 'body';
+    let segText = '体';
+    
+    if (i === 0) {
+      segType = 'head';
+      segText = (block.type === 'yagyu' && block.len === 1) ? '🔥顔' : '顔';
+    } else if (i === block.len - 1) {
+      segType = 'butt';
+      segText = 'お尻';
+    }
+    
+    segmentsHTML += `
+      <div class="segment">
+        <div class="seg-image seg-${segType}">${segText}</div>
+      </div>
+    `;
+  }
+  return segmentsHTML;
+}
+
+// ==========================================
+// 描画処理
+// ==========================================
+function renderBoard() {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  let rendered = Array.from({ length: HEIGHT }, () => Array(WIDTH).fill(false));
+
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let x = 0; x < WIDTH; x++) {
+      if (rendered[y][x]) continue;
+      const cell = document.createElement('div');
+      const block = board[y][x];
+
+      if (!block) {
+        cell.className = 'cell empty';
+        grid.appendChild(cell);
+      } else {
+        cell.className = `cell dir-${block.dir}`;
+        cell.style.gridColumnStart = x + 1;
+        cell.style.gridColumnEnd = x + 1 + block.len;
+        cell.setAttribute('data-type', block.type);
+        cell.setAttribute('data-len', block.len);
+        
+        cell.innerHTML = createSegmentsHTML(block);
+        grid.appendChild(cell);
+
+        for (let i = 0; i < block.len; i++) rendered[y][x + i] = true;
+      }
+    }
+  }
+}
+
+function renderNextBar() {
+  const bar = document.getElementById('nextBar');
+  bar.innerHTML = '';
+  let rendered = Array(WIDTH).fill(false);
+
+  for (let x = 0; x < WIDTH; x++) {
+    if (rendered[x]) continue;
+    const cell = document.createElement('div');
+    const block = nextRowData[x];
+
+    if (!block) {
+      cell.className = 'next-cell empty';
+      bar.appendChild(cell);
+    } else {
+      cell.className = 'next-cell';
+      cell.style.gridColumnStart = x + 1;
+      cell.style.gridColumnEnd = x + 1 + block.len;
+      cell.setAttribute('data-type', block.type);
+      cell.setAttribute('data-len', block.len);
+      bar.appendChild(cell);
+
+      for (let i = 0; i < block.len; i++) rendered[x + i] = true;
+    }
+  }
+}
+
+function clearNextRow() {
+  nextRowData = new Array(WIDTH).fill(null);
+  renderNextBar();
+}
+
+// ==========================================
+// 重力・消去・ターン進め・AI実行
+// ==========================================
+function applyGravity(currentBoard) {
+  let moved = false;
+  for (let y = HEIGHT - 2; y >= 0; y--) {
+    let x = 0;
+    while (x < WIDTH) {
+      const block = currentBoard[y][x];
+      if (block) {
+        let canFall = true;
+        for (let i = 0; i < block.len; i++) {
+          if (currentBoard[y + 1][x + i] !== null) { canFall = false; break; }
+        }
+        if (canFall) {
+          for (let i = 0; i < block.len; i++) {
+            currentBoard[y + 1][x + i] = block;
+            currentBoard[y][x + i] = null;
+          }
+          moved = true;
+        }
+        x += block.len;
+      } else { x++; }
+    }
+  }
+  if (moved) applyGravity(currentBoard);
+  return moved;
+}
+
+function checkLines(currentBoard) {
+  let linesCleared = 0;
+  for (let y = 0; y < HEIGHT; y++) {
+    let isFull = true;
+    for (let x = 0; x < WIDTH; x++) {
+      if (currentBoard[y][x] === null) { isFull = false; break; }
+    }
+    if (isFull) {
+      linesCleared++;
+      let x = 0;
+      while (x < WIDTH) {
+        const block = currentBoard[y][x];
+        if (block.type === 'yagyu') {
+          if (block.len === 1) {
+            currentBoard[y][x] = null;
+          } else {
+            block.len -= 1;
+            if (block.dir === 'left') currentBoard[y][x + block.len] = null;
+            else currentBoard[y][x] = null;
+          }
+        } else {
+          for (let i = 0; i < block.len; i++) currentBoard[y][x + i] = null;
+        }
+        x += (block ? block.len : 1);
+      }
+    }
+  }
+  if (linesCleared > 0) {
+    applyGravity(currentBoard);
+    linesCleared += checkLines(currentBoard);
+  }
+  return linesCleared;
+}
+
+function applyNextRow() {
+  for(let x=0; x<WIDTH; x++) {
+    if(board[0][x] !== null) return alert('最上段に駒があるため、これ以上せり上がれません！');
+  }
+  for (let y = 0; y < HEIGHT - 1; y++) { board[y] = [...board[y + 1]]; }
+  board[HEIGHT - 1] = [...nextRowData];
+  nextRowData = new Array(WIDTH).fill(null);
+  
+  applyGravity(board);
+  checkLines(board);
+  renderBoard();
+  renderNextBar();
+  document.getElementById('aiResult').innerHTML = 'ターンが進みました。右上青色の「⚡ 実行」を押して次の一手を計算してください。';
+}
+
+function executeAI() {
+  const aiBox = document.getElementById('aiResult');
+  aiBox.innerHTML = '<span style="color:#d97706;">分析中... 最善手を見つけています...</span>';
+
+  setTimeout(() => {
+    let bestMove = null;
+    let maxScore = -999999;
+    let blocks = [];
+    let visited = new Set();
+
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        const b = board[y][x];
+        if (b && !visited.has(b.id)) {
+          visited.add(b.id);
+          blocks.push({ block: b, x, y });
+        }
+      }
+    }
+
+    blocks.forEach(({ block, x, y }) => {
+      for (let step = 1; step <= x; step++) {
+        if (board[y][x - step] !== null) break;
+        const score = simulateMove(block.id, x, y, -step);
+        if (score > maxScore) {
+          maxScore = score;
+          bestMove = { name: block.name, fromX: x, y: y, dir: '左 ⬅', steps: step, score };
+        }
+      }
+      for (let step = 1; step <= (WIDTH - (x + block.len)); step++) {
+        if (board[y][x + block.len + step - 1] !== null) break;
+        const score = simulateMove(block.id, x, y, step);
+        if (score > maxScore) {
+          maxScore = score;
+          bestMove = { name: block.name, fromX: x, y: y, dir: '右 ➡', steps: step, score };
+        }
+      }
+    });
+
+    if (bestMove && maxScore > -50000) {
+      aiBox.innerHTML = `
+        <div style="color:#16a34a; font-size:16px; font-weight:bold; margin-bottom:5px;">★ おすすめの次の一手:</div>
+        上から <b>${bestMove.y + 1}段目</b>、左から <b>${bestMove.fromX + 1}列目</b>の<br>
+        <span style="font-size:18px; color:#ea580c; font-weight:bold;">「${bestMove.name}」</span> を <span style="font-size:18px; color:#2563eb; font-weight:bold;">${bestMove.dir} に ${bestMove.steps}マス</span> 動かす！<br>
+        <div style="font-size:11px; color:#64748b; margin-top:4px;">(AI評価スコア: ${bestMove.score})</div>
+      `;
+    } else {
+      aiBox.innerHTML = '<span style="color:#dc2626; font-weight:bold;">有効な手がありません（動かせる駒がないか、ゲームオーバー目前です）。</span>';
+    }
+  }, 50);
+}
+
+function simulateMove(blockId, origX, origY, deltaX) {
+  let simBoard = board.map(row => [...row]);
+  let targetBlock = null;
+  for (let x = 0; x < WIDTH; x++) {
+    if (simBoard[origY][x] && simBoard[origY][x].id === blockId) {
+      targetBlock = simBoard[origY][x];
+      simBoard[origY][x] = null;
+    }
+  }
+  for (let i = 0; i < targetBlock.len; i++) {
+    simBoard[origY][origX + deltaX + i] = targetBlock;
+  }
+
+  applyGravity(simBoard);
+  let linesCleared = checkLines(simBoard);
+
+  let score = linesCleared * 10000;
+  let highestBlockY = HEIGHT;
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let x = 0; x < WIDTH; x++) {
+      if (simBoard[y][x] !== null) { highestBlockY = y; break; }
+    }
+    if (highestBlockY !== HEIGHT) break;
+  }
+  score -= (HEIGHT - highestBlockY) * 100;
+
+  let holes = 0;
+  for (let x = 0; x < WIDTH; x++) {
+    let blockSeen = false;
+    for (let y = 0; y < HEIGHT; y++) {
+      if (simBoard[y][x] !== null) blockSeen = true;
+      else if (blockSeen && simBoard[y][x] === null) holes++;
+    }
+  }
+  score -= holes * 50;
+  return score;
+}
+
+init();
+</script>
+</body>
+</html>
